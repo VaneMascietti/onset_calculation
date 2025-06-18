@@ -15,7 +15,7 @@ from sympy import symbols, Eq, solve
 # REALIZANDO A ATENUAÇÃO DE SINAL POR TRANSFORMADA DE FOURIER #
 
 # Carregar o arquivo CSV (já tirei o cabeçalho, trocar ; por ,) 
-df = pd.read_csv(r"C:\Users\natal\OneDrive\Desktop\arquivo.csv.txt", sep=';', header=None)
+df = pd.read_csv(r"250507_EtOH_nC16_0109w.csv", sep=';', header=8, encoding='latin1', on_bad_lines='skip')
 
 # Filtrar PRIMEIRO os dados onde X está entre 20 e 45 (selecionar a rampa não todo experimento)
 df_filtrado = df[(df[1].astype(float) >= 20) & (df[1].astype(float) <= 45)].copy()
