@@ -4,12 +4,12 @@ import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from sklearn.linear_model import LinearRegression
 from sympy import symbols, Eq, solve
+import os
+import pathlib
 
 # --- CARGA Y FILTRADO DE DATOS ---
-import os
 DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'results')
-
 csv_file = os.path.join(DATA_DIR, "250507_EtOH_nC16_0109w-1.csv")
 df = pd.read_csv(csv_file, sep=';', header=None)
 df_filtrado = df[(df[1].astype(float) >= 20) & (df[1].astype(float) <= 45)].copy()
@@ -25,7 +25,7 @@ mask = np.abs(freq) <= cutoff
 y_fft_filtrado = np.real(np.fft.ifft(y_fft * mask))
 y_atenuado = y_fft_filtrado
 
-# --- MEDIA MÓVEL E DETECÇÃO DE PICS/MÍNIMOS ---
+# --- MEDIA MÓVEL Y DETECCIÓN DE PICOS/MÍNIMOS ---
 window_size = 8
 media_movel = pd.Series(y_atenuado).rolling(window=window_size, center=True).mean()
 media_movel_clean = media_movel.dropna()
@@ -33,8 +33,7 @@ x_valid = pd.Series(x)[media_movel.notna()]
 peaks, _ = find_peaks(media_movel_clean)
 minimos, _ = find_peaks(-media_movel_clean)
 
-# Salvar a média móvel em um arquivo na pasta results
-import pathlib
+# Guardar la media móvil en results
 pathlib.Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
 media_movel_df = pd.DataFrame({'X': x, 'Media_Movel': media_movel})
 media_movel_df.to_csv(os.path.join(RESULTS_DIR, 'media_movel.csv'), index=False)
@@ -45,7 +44,8 @@ x_max_global = x_valid.iloc[pico_maximo_global_idx]
 y_max_global = media_movel_clean.iloc[pico_maximo_global_idx]
 
 # Segundo máximo después del máximo global
-df_pos_max_global = pd.DataFrame({'X': x_valid, 'Media_Movel': media_movel_clean})[x_valid > x_max_global]
+pos_mask = x_valid > x_max_global
+df_pos_max_global = pd.DataFrame({'X': x_valid, 'Media_Movel': media_movel_clean})[pos_mask]
 media_movel_pos = df_pos_max_global['Media_Movel'].reset_index(drop=True)
 peaks_pos, _ = find_peaks(media_movel_pos)
 if len(peaks_pos) > 0:
