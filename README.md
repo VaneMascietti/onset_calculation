@@ -50,9 +50,9 @@ onset_calculation/
    pip install numpy scipy matplotlib pandas scikit-learn sympy
    ```
 
-3. Executar o script principal (ajuste o nome se você alterou):
+3. Executar o script principal:
    ```bash
-   python src/signal_analysis.py
+   src/PyCode_FFT_Signal_Treatment3.py
    ```
 
 ---
