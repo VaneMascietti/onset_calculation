@@ -1,0 +1,142 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from sklearn.linear_model import LinearRegression
+from sympy import symbols, Eq, solve
+
+# --- CARGA Y FILTRADO DE DATOS ---
+import os
+DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'results')
+
+csv_file = os.path.join(DATA_DIR, "250507_EtOH_nC16_0109w-1.csv")
+df = pd.read_csv(csv_file, sep=';', header=None)
+df_filtrado = df[(df[1].astype(float) >= 20) & (df[1].astype(float) <= 45)].copy()
+x = df_filtrado[1].astype(float).values
+y_original = df_filtrado[2].astype(float).values
+
+# --- FILTRADO FOURIER ---
+y_fft = np.fft.fft(y_original)
+n = len(y_original)
+freq = np.fft.fftfreq(n)
+cutoff = 0.005
+mask = np.abs(freq) <= cutoff
+y_fft_filtrado = np.real(np.fft.ifft(y_fft * mask))
+y_atenuado = y_fft_filtrado
+
+# --- MEDIA MÓVEL E DETECÇÃO DE PICS/MÍNIMOS ---
+window_size = 8
+media_movel = pd.Series(y_atenuado).rolling(window=window_size, center=True).mean()
+media_movel_clean = media_movel.dropna()
+x_valid = pd.Series(x)[media_movel.notna()]
+peaks, _ = find_peaks(media_movel_clean)
+minimos, _ = find_peaks(-media_movel_clean)
+
+# Salvar a média móvel em um arquivo na pasta results
+import pathlib
+pathlib.Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+media_movel_df = pd.DataFrame({'X': x, 'Media_Movel': media_movel})
+media_movel_df.to_csv(os.path.join(RESULTS_DIR, 'media_movel.csv'), index=False)
+
+# --- ENCONTRAR PUNTOS CLAVE ---
+pico_maximo_global_idx = peaks[np.argmax(media_movel_clean.iloc[peaks])]
+x_max_global = x_valid.iloc[pico_maximo_global_idx]
+y_max_global = media_movel_clean.iloc[pico_maximo_global_idx]
+
+# Segundo máximo después del máximo global
+df_pos_max_global = pd.DataFrame({'X': x_valid, 'Media_Movel': media_movel_clean})[x_valid > x_max_global]
+media_movel_pos = df_pos_max_global['Media_Movel'].reset_index(drop=True)
+peaks_pos, _ = find_peaks(media_movel_pos)
+if len(peaks_pos) > 0:
+    segundo_max_idx = peaks_pos[np.argmax(media_movel_pos.iloc[peaks_pos])]
+    x_segundo_max = df_pos_max_global['X'].iloc[segundo_max_idx]
+    y_segundo_max = media_movel_pos.iloc[segundo_max_idx]
+else:
+    x_segundo_max = x_max_global
+    y_segundo_max = y_max_global
+
+# Mínimo local entre máximo global y segundo máximo
+df_entre_maximos = df_pos_max_global[(df_pos_max_global['X'] >= x_max_global) & (df_pos_max_global['X'] <= x_segundo_max)]
+media_movel_entre = df_entre_maximos['Media_Movel'].reset_index(drop=True)
+minimos_entre, _ = find_peaks(-media_movel_entre)
+if len(minimos_entre) > 0:
+    minimo_idx = minimos_entre[np.argmin(media_movel_entre.iloc[minimos_entre])]
+    x_minimo = df_entre_maximos['X'].iloc[minimo_idx]
+    y_minimo = media_movel_entre.iloc[minimo_idx]
+else:
+    x_minimo = x_max_global
+    y_minimo = y_max_global
+
+# --- REGRESIÓN LINEAL 1 ---
+x_ini_r1, x_fim_r1 = sorted([x_segundo_max, x_minimo])
+mask_r1 = (x >= x_ini_r1) & (x <= x_fim_r1)
+X1 = x[mask_r1].reshape(-1, 1)
+y1 = y_atenuado[mask_r1]
+modelo1 = LinearRegression().fit(X1, y1)
+slope1, intercept1 = modelo1.coef_[0], modelo1.intercept_
+
+# --- REGRESIÓN LINEAL 2 (20% central entre máximo global y mínimo) ---
+x_ini, x_fim = sorted([x_max_global, x_minimo])
+mask_central = (x >= x_ini) & (x <= x_fim)
+x_sub = x[mask_central]
+y_sub = y_atenuado[mask_central]
+n_total = len(x_sub)
+n_central = max(2, int(n_total * 0.2))
+start = (n_total - n_central) // 2
+end = start + n_central
+X2 = x_sub[start:end].reshape(-1, 1)
+y2 = y_sub[start:end]
+modelo2 = LinearRegression().fit(X2, y2)
+slope2, intercept2 = modelo2.coef_[0], modelo2.intercept_
+
+# --- INTERSECCIÓN DE LAS DOS RECTAS ---
+x_sym = symbols('x')
+x_intersec = float(solve(Eq(slope1 * x_sym + intercept1, slope2 * x_sym + intercept2))[0])
+y_intersec = float(slope1 * x_intersec + intercept1)
+
+# --- GRÁFICO 1: Datos Originales ---
+plt.figure(figsize=(8, 5))
+plt.plot(x, y_original, 'b-', label='Original')
+plt.title('Datos Originales (X entre 20–45)')
+plt.xlabel('X (K)')
+plt.ylabel('Y')
+plt.grid(alpha=0.3)
+plt.legend()
+plt.tight_layout()
+plt.show(block=False)
+
+# --- GRÁFICO 4: Curva suavizada con regresiones y extrapolaciones ---
+plt.figure(figsize=(12, 6))
+plt.plot(x, y_atenuado, label='Curva Atenuada (Fourier)', color='blue')
+plt.scatter(x_max_global, y_max_global, color='red', label='Máximo Global', zorder=5)
+plt.scatter(x_segundo_max, y_segundo_max, color='orange', label='Segundo Máximo', zorder=5)
+plt.scatter(x_minimo, y_minimo, color='green', label='Mínimo Local', zorder=5)
+
+# Reta 1 (original no intervalo regressão: segundo máximo -> mínimo)
+X1_orig = np.array([x_segundo_max, x_minimo])
+y1_orig = slope1 * X1_orig + intercept1
+plt.plot(X1_orig, y1_orig, color='red', linestyle='--', label='Regressão 1 (original)')
+
+# Reta 1 extrapolada (do máximo global até segundo máximo)
+X1_extra = np.array([x_max_global, x_segundo_max])
+y1_extra = slope1 * X1_extra + intercept1
+plt.plot(X1_extra, y1_extra, color='red', linestyle='--', label='Regressão 1 (extrapolação)')
+
+# Reta 2 (extrapolada do máximo global até mínimo local)
+X2_line = np.array([x_max_global, x_minimo])
+y2_line = slope2 * X2_line + intercept2
+plt.plot(X2_line, y2_line, color='red', linestyle='--', label='Regressão 2 (extrapolada)')
+
+# Interseção
+plt.scatter(x_intersec, y_intersec, color='purple', label='Interseção', s=100, marker='X', zorder=6)
+
+plt.xlabel('X')
+plt.ylabel('Y (Curva Atenuada)')
+plt.title('Curva Suavizada com Retas de Regressão e Extrapolação')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show(block=False)
+
+input("Presiona ENTER para cerrar los gráficos")
