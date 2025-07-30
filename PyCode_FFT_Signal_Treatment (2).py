@@ -15,7 +15,7 @@ from sympy import symbols, Eq, solve
 
 # REALIZANDO A ATENUAÇÃO DE SINAL POR TRANSFORMADA DE FOURIER #
 # Carregar o arquivo CSV (já tirei o cabeçalho, trocar ; por ,) 
-df = pd.read_csv(r"C:\Users\atoms\Documents\250507_EtOH_nC16_0109w.csv", sep=';', header=None)
+df = pd.read_csv("250507_EtOH_nC16_0109w-1.csv", sep=';', header=None)
 
 # Filtrar PRIMEIRO os dados onde X está entre 20 e 45 (selecionar a rampa não todo experimento)
 df_filtrado = df[(df[1].astype(float) >= 20) & (df[1].astype(float) <= 45)].copy()
@@ -198,7 +198,7 @@ plt.grid(alpha=0.3)
 plt.legend()
 
 plt.tight_layout()
-plt.show()
+plt.show(block=False)
 
 # Plota a média móvel com picos e mínimos locais em um único gráfico
 plt.figure(figsize=(12, 6))
@@ -211,7 +211,7 @@ plt.ylabel('Y (Média Móvel)')
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.show()
+plt.show(block=False)
 
 # Plota as regressões
 plt.figure(figsize=(12, 6))
@@ -248,4 +248,5 @@ plt.title('Curva Suavizada com Retas de Regressão e Extrapolação')
 plt.legend()
 plt.grid(True)
 plt.tight_layout()
-plt.show()
+plt.show(block=False)
+input("Presiona ENTER para cerrar los gráficos y terminar...")
